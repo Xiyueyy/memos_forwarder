@@ -66,6 +66,7 @@ class MemosWorkspaceForwarderConfig:
     forward_images: bool = True
     max_images_per_memo: int = 4
     render_memo_card: bool = True
+    card_canvas_width: int = 720
     card_preview_image_count: int = 4
     standalone_images_when_card_enabled: bool = False
     announcement_template: str = "{display_name} 发了新手记"
@@ -148,6 +149,7 @@ class MemosWorkspaceForwarderConfig:
                 int(runtime_conf.get("max_images_per_memo", 4) or 0),
             ),
             render_memo_card=bool(runtime_conf.get("render_memo_card", True)),
+            card_canvas_width=int(runtime_conf.get("card_canvas_width", 720) or 720),
             card_preview_image_count=max(
                 0,
                 int(runtime_conf.get("card_preview_image_count", 4) or 0),
@@ -244,6 +246,8 @@ class MemosWorkspaceForwarderConfig:
             raise ConfigValidationError("summary_max_chars 必须 > 0")
         if self.max_images_per_memo < 0:
             raise ConfigValidationError("max_images_per_memo 不能 < 0")
+        if self.card_canvas_width < 480 or self.card_canvas_width > 1200:
+            raise ConfigValidationError("card_canvas_width 必须在 480-1200 之间")
         if self.card_preview_image_count < 0:
             raise ConfigValidationError("card_preview_image_count 不能 < 0")
         if not self.announcement_template:

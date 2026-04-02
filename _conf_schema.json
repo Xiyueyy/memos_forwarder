@@ -179,6 +179,11 @@
     "default": true,
     "description": "是否把新帖子渲染成一张手记卡片图"
   },
+  "card_canvas_width": {
+    "type": "int",
+    "default": 720,
+    "description": "卡片图宽度，范围 480-1200，默认 720"
+  },
   "card_preview_image_count": {
     "type": "int",
     "default": 4,

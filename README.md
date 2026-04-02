@@ -71,6 +71,7 @@ visibility in ["PROTECTED", "PUBLIC"]
 - `render_memo_card = true` 时，插件会优先把帖子渲染成一张卡片图
 - 卡片图会带作者头像、昵称、时间、可见性、正文和图片预览
 - `announcement_template` 控制提示语，默认是 `{display_name} 发了新手记`
+- `card_canvas_width` 控制卡片图宽度，默认 `720`，可按需调到 `480-1200`
 - `card_preview_image_count` 控制卡片图里最多展示多少张图片
 - `standalone_images_when_card_enabled = false` 时，只发卡片图，不额外再把原图单独发一遍
 - `standalone_images_when_card_enabled = true` 时，卡片图后面还会补发原始图片消息
@@ -125,6 +126,7 @@ visibility in ["PROTECTED", "PUBLIC"]
 - `forward_images`
 - `max_images_per_memo`
 - `render_memo_card`
+- `card_canvas_width`
 - `card_preview_image_count`
 - `standalone_images_when_card_enabled`
 - `announcement_template`
@@ -172,6 +174,7 @@ visibility in ["PROTECTED", "PUBLIC"]
   "forward_images": true,
   "max_images_per_memo": 4,
   "render_memo_card": true,
+  "card_canvas_width": 720,
   "card_preview_image_count": 4,
   "standalone_images_when_card_enabled": false,
   "announcement_template": "{display_name} 发了新手记"
@@ -229,6 +232,13 @@ max_images_per_memo = 2
 ```text
 render_memo_card = true
 standalone_images_when_card_enabled = false
+```
+
+把卡片调窄一点：
+
+```text
+render_memo_card = true
+card_canvas_width = 640
 ```
 
 修改提示语：

@@ -33,7 +33,9 @@ class MemoCardRenderer:
     """Render a memo card that looks closer to the native Memos post card."""
 
     _RENDER_SCALE = 4
-    _CANVAS_WIDTH = 900
+    _DEFAULT_CANVAS_WIDTH = 720
+    _MIN_CANVAS_WIDTH = 480
+    _MAX_CANVAS_WIDTH = 1200
     _PAGE_PADDING = 18
     _CARD_PADDING_X = 16
     _CARD_PADDING_Y = 14
@@ -125,18 +127,6 @@ class MemoCardRenderer:
         badge_font = self._font(self._scaled(12), bold=False)
         placeholder_font = self._font(self._scaled(14), bold=True)
 
-        card_width = self._scaled(self._CANVAS_WIDTH - self._PAGE_PADDING * 2)
-        content_width = card_width - self._scaled(self._CARD_PADDING_X * 2)
-        header_text_width = (
-            content_width
-            - self._scaled(self._AVATAR_SIZE)
-            - self._scaled(self._HEADER_GAP)
-            - self._scaled(74)
-        )
-
-        scratch = Image.new("RGBA", (self._scaled(self._CANVAS_WIDTH), self._scaled(200)), (255, 255, 255, 0))
-        scratch_draw = ImageDraw.Draw(scratch)
-
         display_name = str(
             item.get("creator_display_name")
             or item.get("creator_name")
@@ -145,6 +135,23 @@ class MemoCardRenderer:
         ).strip()
         time_text = str(item.get("published_at_text", "")).strip()
         visibility_text = str(item.get("visibility_label", "")).strip()
+
+        canvas_width = self._scaled(self._card_canvas_width())
+        card_width = canvas_width - self._scaled(self._PAGE_PADDING * 2)
+        content_width = card_width - self._scaled(self._CARD_PADDING_X * 2)
+
+        scratch = Image.new("RGBA", (canvas_width, self._scaled(200)), (255, 255, 255, 0))
+        scratch_draw = ImageDraw.Draw(scratch)
+
+        badge_reserved_width = self._visibility_badge_width(scratch_draw, visibility_text, badge_font)
+        header_text_width = max(
+            content_width
+            - self._scaled(self._AVATAR_SIZE)
+            - self._scaled(self._HEADER_GAP)
+            - badge_reserved_width,
+            self._scaled(140),
+        )
+        header_text_width = min(header_text_width, content_width)
 
         title = self._select_distinct_title(item)
         content = self._clean_body_text(
@@ -199,7 +206,7 @@ class MemoCardRenderer:
             card_height += preview_height + self._scaled(self._SECTION_GAP)
 
         canvas_height = card_height + self._scaled(self._PAGE_PADDING * 2)
-        canvas = Image.new("RGBA", (self._scaled(self._CANVAS_WIDTH), canvas_height), colors["page_bg"])
+        canvas = Image.new("RGBA", (canvas_width, canvas_height), colors["page_bg"])
         draw = ImageDraw.Draw(canvas)
 
         card_left = self._scaled(self._PAGE_PADDING)
@@ -426,7 +433,7 @@ class MemoCardRenderer:
             "私有": ((254, 242, 242, 255), (185, 28, 28, 255), (254, 202, 202, 255)),
         }
         bg, fg, border = color_map.get(text, ((243, 244, 246, 255), (75, 85, 99, 255), (229, 231, 235, 255)))
-        bbox = draw.textbbox((0, 0), text, font=font)
+        bbox = self._measure_text_bbox(draw, text, font)
         width = bbox[2] - bbox[0] + self._scaled(16)
         height = bbox[3] - bbox[1] + self._scaled(8)
         left = right - width
@@ -443,6 +450,12 @@ class MemoCardRenderer:
             font=font,
             fill=fg,
         )
+
+    def _visibility_badge_width(self, draw, text: str, font) -> int:
+        if not text:
+            return 0
+        bbox = self._measure_text_bbox(draw, text, font)
+        return bbox[2] - bbox[0] + self._scaled(28)
 
     def _draw_previews(
         self,
@@ -906,6 +919,14 @@ class MemoCardRenderer:
 
     def _scaled(self, value: int) -> int:
         return max(int(round(value * self._RENDER_SCALE)), 1)
+
+    def _card_canvas_width(self) -> int:
+        value = getattr(self._config, "card_canvas_width", self._DEFAULT_CANVAS_WIDTH)
+        try:
+            value = int(value or self._DEFAULT_CANVAS_WIDTH)
+        except (TypeError, ValueError):
+            value = self._DEFAULT_CANVAS_WIDTH
+        return max(self._MIN_CANVAS_WIDTH, min(value, self._MAX_CANVAS_WIDTH))
 
     @staticmethod
     def _same_site(base_url: str, url: str) -> bool:
