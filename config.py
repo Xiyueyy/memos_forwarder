@@ -215,8 +215,6 @@ class MemosWorkspaceForwarderConfig:
                 raise ConfigValidationError("jobs.id 不能为空")
             if not job.source_ids:
                 raise ConfigValidationError(f"jobs[{job.id}].source_ids 不能为空")
-            if not job.target_ids:
-                raise ConfigValidationError(f"jobs[{job.id}].target_ids 不能为空")
             if job.interval_seconds <= 0:
                 raise ConfigValidationError(f"jobs[{job.id}].interval_seconds 必须 > 0")
             if job.batch_size <= 0:
@@ -302,10 +300,12 @@ class MemosWorkspaceForwarderConfig:
     ) -> list[JobConfig]:
         if jobs:
             return jobs
+
         enabled_sources = [source.id for source in sources if source.enabled and source.id]
         enabled_targets = [target.id for target in targets if target.enabled and target.id]
-        if not enabled_sources or not enabled_targets:
+        if not enabled_sources:
             return jobs
+
         return [
             JobConfig(
                 id="memos_default",

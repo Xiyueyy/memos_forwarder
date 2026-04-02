@@ -33,7 +33,12 @@ class MemosWorkspaceForwarderPlugin(Star, MemosWorkspaceCommands):
         )
         fetcher = MemosFetcher(config=plugin_config, storage=storage)
         renderer = MemoCardRenderer(plugin_config, storage.plugin_cache_dir())
-        dispatcher = MemoDispatcher(context=context, config=plugin_config, renderer=renderer)
+        dispatcher = MemoDispatcher(
+            context=context,
+            config=plugin_config,
+            renderer=renderer,
+            storage=storage,
+        )
 
         self.scheduler = MemosWorkspaceScheduler(
             config=plugin_config,
@@ -41,6 +46,7 @@ class MemosWorkspaceForwarderPlugin(Star, MemosWorkspaceCommands):
             dispatcher=dispatcher,
             storage=storage,
         )
+        self.dispatcher = dispatcher
 
     async def initialize(self):
         await self.scheduler.start()

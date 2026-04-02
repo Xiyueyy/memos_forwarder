@@ -17,6 +17,7 @@ class MemoForwarderStorage:
     SOURCE_STATE_PREFIX = "source_state:"
     CONTENT_KEY_PREFIX = "content_seen:"
     CONTENT_INDEX_KEY = "content_seen_index"
+    JOB_SUBSCRIPTIONS_PREFIX = "job_subscriptions:"
 
     def __init__(
         self,
@@ -124,6 +125,41 @@ class MemoForwarderStorage:
     async def get_source_state(self, source_id: str) -> dict[str, Any]:
         return await self.get(self._source_state_key(source_id), default={})
 
+    async def get_job_subscriptions(self, job_id: str) -> list[str]:
+        values = await self.get(self._job_subscriptions_key(job_id), default=[])
+        if not isinstance(values, list):
+            return []
+        return sorted({str(value).strip() for value in values if str(value).strip()})
+
+    async def add_job_subscription(self, job_id: str, origin: str) -> bool:
+        normalized_origin = str(origin or "").strip()
+        if not normalized_origin:
+            return False
+
+        values = await self.get_job_subscriptions(job_id)
+        if normalized_origin in values:
+            return False
+
+        values.append(normalized_origin)
+        await self.put(self._job_subscriptions_key(job_id), sorted(set(values)))
+        return True
+
+    async def remove_job_subscription(self, job_id: str, origin: str) -> bool:
+        normalized_origin = str(origin or "").strip()
+        if not normalized_origin:
+            return False
+
+        values = await self.get_job_subscriptions(job_id)
+        if normalized_origin not in values:
+            return False
+
+        values = [value for value in values if value != normalized_origin]
+        if values:
+            await self.put(self._job_subscriptions_key(job_id), values)
+        else:
+            await self.delete(self._job_subscriptions_key(job_id))
+        return True
+
     async def update_source_state(
         self,
         source_id: str,
@@ -206,3 +242,7 @@ class MemoForwarderStorage:
     @classmethod
     def _content_key(cls, item_id: str) -> str:
         return f"{cls.CONTENT_KEY_PREFIX}{item_id}"
+
+    @classmethod
+    def _job_subscriptions_key(cls, job_id: str) -> str:
+        return f"{cls.JOB_SUBSCRIPTIONS_PREFIX}{job_id}"

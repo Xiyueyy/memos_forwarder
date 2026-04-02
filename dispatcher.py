@@ -12,6 +12,7 @@ from astrbot.api import logger
 
 from .card_renderer import MemoCardRenderer
 from .config import MemosWorkspaceForwarderConfig, SourceConfig
+from .storage import MemoForwarderStorage
 
 
 @dataclass(slots=True)
@@ -22,10 +23,17 @@ class DispatchResult:
 
 
 class MemoDispatcher:
-    def __init__(self, context, config: MemosWorkspaceForwarderConfig, renderer: MemoCardRenderer | None = None) -> None:
+    def __init__(
+        self,
+        context,
+        config: MemosWorkspaceForwarderConfig,
+        renderer: MemoCardRenderer | None = None,
+        storage: MemoForwarderStorage | None = None,
+    ) -> None:
         self.context = context
         self._config = config
         self._renderer = renderer
+        self._storage = storage
         self._source_map = {source.id: source for source in config.sources if source.enabled}
         self._target_map = {
             target.id: target for target in config.targets if target.enabled and target.unified_msg_origin
@@ -66,6 +74,44 @@ class MemoDispatcher:
         normalized_type = type_aliases.get(message_type.strip().lower(), message_type.strip())
         return f"{platform_id}:{normalized_type}:{session_id}"
 
+    def has_job(self, job_id: str) -> bool:
+        return any(job.id == job_id and job.enabled for job in self._config.jobs)
+
+    def enabled_job_ids(self) -> list[str]:
+        return [job.id for job in self._config.jobs if job.enabled]
+
+    def normalize_origin(self, origin: str) -> str:
+        return self._normalize_origin(origin)
+
+    async def get_job_dynamic_origins(self, job_id: str) -> list[str]:
+        if self._storage is None:
+            return []
+        return await self._storage.get_job_subscriptions(job_id)
+
+    async def get_job_origins(self, job_id: str) -> list[str]:
+        origins: set[str] = set(self._job_target_origins.get(job_id, []))
+        dynamic_origins = await self.get_job_dynamic_origins(job_id)
+        origins.update(self._normalize_origin(origin) for origin in dynamic_origins if origin)
+        return sorted(origin for origin in origins if origin)
+
+    async def subscribe(self, job_id: str, origin: str) -> bool:
+        if self._storage is None:
+            return False
+        return await self._storage.add_job_subscription(job_id, self._normalize_origin(origin))
+
+    async def unsubscribe(self, job_id: str, origin: str) -> bool:
+        if self._storage is None:
+            return False
+        return await self._storage.remove_job_subscription(job_id, self._normalize_origin(origin))
+
+    async def get_session_subscriptions(self, origin: str) -> list[str]:
+        normalized_origin = self._normalize_origin(origin)
+        result: list[str] = []
+        for job_id in self.enabled_job_ids():
+            if normalized_origin in await self.get_job_origins(job_id):
+                result.append(job_id)
+        return result
+
     @staticmethod
     def _resolve_messagechain_cls():
         try:
@@ -99,13 +145,13 @@ class MemoDispatcher:
 
             return Image
 
-    def _resolve_origins(self, item: dict[str, Any]) -> list[str]:
+    async def _resolve_origins(self, item: dict[str, Any]) -> list[str]:
         job_id = str(item.get("job_id", "")).strip()
         if job_id:
-            return list(self._job_target_origins.get(job_id, []))
+            return await self.get_job_origins(job_id)
         origins: set[str] = set()
-        for values in self._job_target_origins.values():
-            origins.update(values)
+        for enabled_job_id in self.enabled_job_ids():
+            origins.update(await self.get_job_origins(enabled_job_id))
         return sorted(origins)
 
     def _announce(self, item: dict[str, Any]) -> str:
@@ -262,7 +308,7 @@ class MemoDispatcher:
         return any(tag in text for tag in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic", ".heif"))
 
     async def dispatch(self, item: dict[str, Any]) -> DispatchResult:
-        origins = self._resolve_origins(item)
+        origins = await self._resolve_origins(item)
         if not origins:
             return DispatchResult(skipped_disabled_count=1)
         payload = await self._build_chain(item)

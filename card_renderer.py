@@ -32,6 +32,7 @@ class _EmojiFontHandle:
 class MemoCardRenderer:
     """Render a memo card that looks closer to the native Memos post card."""
 
+    _RENDER_SCALE = 4
     _CANVAS_WIDTH = 900
     _PAGE_PADDING = 18
     _CARD_PADDING_X = 16
@@ -40,7 +41,7 @@ class MemoCardRenderer:
     _HEADER_GAP = 12
     _SECTION_GAP = 12
     _IMAGE_GAP = 10
-    _SINGLE_IMAGE_MAX_HEIGHT = 420
+    _SINGLE_IMAGE_MAX_HEIGHT = 560
     _GRID_IMAGE_HEIGHT = 190
     _BODY_MAX_CHARS = 2600
     _MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024
@@ -117,19 +118,23 @@ class MemoCardRenderer:
             "avatar_border": (229, 231, 235, 255),
         }
 
-        name_font = self._font(16, bold=False)
-        time_font = self._font(12, bold=False)
-        body_font = self._font(17, bold=False)
-        heading_font = self._font(20, bold=True)
-        badge_font = self._font(12, bold=False)
-        placeholder_font = self._font(14, bold=True)
+        name_font = self._font(self._scaled(16), bold=False)
+        time_font = self._font(self._scaled(12), bold=False)
+        body_font = self._font(self._scaled(17), bold=False)
+        heading_font = self._font(self._scaled(20), bold=True)
+        badge_font = self._font(self._scaled(12), bold=False)
+        placeholder_font = self._font(self._scaled(14), bold=True)
 
-        card_width = self._CANVAS_WIDTH - self._PAGE_PADDING * 2
-        content_width = card_width - self._CARD_PADDING_X * 2
-        header_text_x = self._CARD_PADDING_X + self._AVATAR_SIZE + self._HEADER_GAP
-        header_text_width = content_width - self._AVATAR_SIZE - self._HEADER_GAP - 74
+        card_width = self._scaled(self._CANVAS_WIDTH - self._PAGE_PADDING * 2)
+        content_width = card_width - self._scaled(self._CARD_PADDING_X * 2)
+        header_text_width = (
+            content_width
+            - self._scaled(self._AVATAR_SIZE)
+            - self._scaled(self._HEADER_GAP)
+            - self._scaled(74)
+        )
 
-        scratch = Image.new("RGBA", (self._CANVAS_WIDTH, 200), (255, 255, 255, 0))
+        scratch = Image.new("RGBA", (self._scaled(self._CANVAS_WIDTH), self._scaled(200)), (255, 255, 255, 0))
         scratch_draw = ImageDraw.Draw(scratch)
 
         display_name = str(
@@ -158,39 +163,60 @@ class MemoCardRenderer:
 
         header_height = max(
             self._AVATAR_SIZE,
-            self._measure_lines_height(name_lines, name_line_height, line_gap=4, paragraph_gap=0)
-            + (4 if time_lines else 0)
-            + self._measure_lines_height(time_lines, time_line_height, line_gap=2, paragraph_gap=0),
+            self._measure_lines_height(
+                name_lines,
+                name_line_height,
+                line_gap=self._scaled(4),
+                paragraph_gap=0,
+            )
+            + (self._scaled(4) if time_lines else 0)
+            + self._measure_lines_height(
+                time_lines,
+                time_line_height,
+                line_gap=self._scaled(2),
+                paragraph_gap=0,
+            ),
         )
-        title_height = self._measure_lines_height(title_lines, heading_line_height, line_gap=6, paragraph_gap=10)
-        body_height = self._measure_lines_height(body_lines, body_line_height, line_gap=8, paragraph_gap=14)
+        header_height = max(self._scaled(self._AVATAR_SIZE), header_height)
+        title_height = self._measure_lines_height(
+            title_lines,
+            heading_line_height,
+            line_gap=self._scaled(6),
+            paragraph_gap=self._scaled(10),
+        )
+        body_height = self._measure_lines_height(
+            body_lines,
+            body_line_height,
+            line_gap=self._scaled(8),
+            paragraph_gap=self._scaled(14),
+        )
         preview_height = self._measure_preview_height(previews, content_width)
 
-        card_height = self._CARD_PADDING_Y * 2 + header_height + body_height
+        card_height = self._scaled(self._CARD_PADDING_Y * 2) + header_height + body_height
         if title_height:
-            card_height += title_height + self._SECTION_GAP
+            card_height += title_height + self._scaled(self._SECTION_GAP)
         if preview_height:
-            card_height += preview_height + self._SECTION_GAP
+            card_height += preview_height + self._scaled(self._SECTION_GAP)
 
-        canvas_height = card_height + self._PAGE_PADDING * 2
-        canvas = Image.new("RGBA", (self._CANVAS_WIDTH, canvas_height), colors["page_bg"])
+        canvas_height = card_height + self._scaled(self._PAGE_PADDING * 2)
+        canvas = Image.new("RGBA", (self._scaled(self._CANVAS_WIDTH), canvas_height), colors["page_bg"])
         draw = ImageDraw.Draw(canvas)
 
-        card_left = self._PAGE_PADDING
-        card_top = self._PAGE_PADDING
+        card_left = self._scaled(self._PAGE_PADDING)
+        card_top = self._scaled(self._PAGE_PADDING)
         card_right = card_left + card_width
         card_bottom = card_top + card_height
 
         draw.rounded_rectangle(
             (card_left, card_top, card_right, card_bottom),
-            radius=14,
+            radius=self._scaled(14),
             fill=colors["card_bg"],
             outline=colors["border"],
-            width=1,
+            width=self._scaled(1),
         )
 
-        content_left = card_left + self._CARD_PADDING_X
-        current_y = card_top + self._CARD_PADDING_Y
+        content_left = card_left + self._scaled(self._CARD_PADDING_X)
+        current_y = card_top + self._scaled(self._CARD_PADDING_Y)
 
         self._draw_avatar(
             canvas,
@@ -203,7 +229,7 @@ class MemoCardRenderer:
             placeholder_font,
         )
 
-        text_left = content_left + self._AVATAR_SIZE + self._HEADER_GAP
+        text_left = content_left + self._scaled(self._AVATAR_SIZE) + self._scaled(self._HEADER_GAP)
         self._draw_wrapped_lines(
             canvas,
             draw,
@@ -212,10 +238,19 @@ class MemoCardRenderer:
             text_left,
             current_y,
             fill=colors["name"],
-            line_gap=4,
+            line_gap=self._scaled(4),
             paragraph_gap=0,
         )
-        time_y = current_y + self._measure_lines_height(name_lines, name_line_height, line_gap=4, paragraph_gap=0) + 2
+        time_y = (
+            current_y
+            + self._measure_lines_height(
+                name_lines,
+                name_line_height,
+                line_gap=self._scaled(4),
+                paragraph_gap=0,
+            )
+            + self._scaled(2)
+        )
         self._draw_wrapped_lines(
             canvas,
             draw,
@@ -224,7 +259,7 @@ class MemoCardRenderer:
             text_left,
             time_y,
             fill=colors["time"],
-            line_gap=2,
+            line_gap=self._scaled(2),
             paragraph_gap=0,
         )
 
@@ -232,12 +267,12 @@ class MemoCardRenderer:
             self._draw_visibility_badge(
                 draw,
                 visibility_text,
-                card_right - self._CARD_PADDING_X,
-                current_y + 1,
+                card_right - self._scaled(self._CARD_PADDING_X),
+                current_y + self._scaled(1),
                 badge_font,
             )
 
-        current_y += header_height + self._SECTION_GAP
+        current_y += header_height + self._scaled(self._SECTION_GAP)
 
         if title_lines:
             self._draw_wrapped_lines(
@@ -248,10 +283,10 @@ class MemoCardRenderer:
                 content_left,
                 current_y,
                 fill=colors["body"],
-                line_gap=6,
-                paragraph_gap=10,
+                line_gap=self._scaled(6),
+                paragraph_gap=self._scaled(10),
             )
-            current_y += title_height + self._SECTION_GAP
+            current_y += title_height + self._scaled(self._SECTION_GAP)
 
         self._draw_wrapped_lines(
             canvas,
@@ -261,13 +296,13 @@ class MemoCardRenderer:
             content_left,
             current_y,
             fill=colors["body"],
-            line_gap=8,
-            paragraph_gap=14,
+            line_gap=self._scaled(8),
+            paragraph_gap=self._scaled(14),
         )
         current_y += body_height
 
         if preview_height:
-            current_y += self._SECTION_GAP
+            current_y += self._scaled(self._SECTION_GAP)
             self._draw_previews(
                 canvas,
                 draw,
@@ -349,11 +384,17 @@ class MemoCardRenderer:
         display_name: str,
         placeholder_font,
     ) -> None:
-        size = self._AVATAR_SIZE
+        size = self._scaled(self._AVATAR_SIZE)
         box = (left, top, left + size, top + size)
-        radius = 10
+        radius = self._scaled(10)
         if avatar is None:
-            draw.rounded_rectangle(box, radius=radius, fill=(243, 244, 246, 255), outline=colors["avatar_border"], width=1)
+            draw.rounded_rectangle(
+                box,
+                radius=radius,
+                fill=(243, 244, 246, 255),
+                outline=colors["avatar_border"],
+                width=self._scaled(1),
+            )
             text = (display_name or "M")[:2]
             bbox = draw.textbbox((0, 0), text, font=placeholder_font)
             text_w = bbox[2] - bbox[0]
@@ -371,7 +412,12 @@ class MemoCardRenderer:
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, size, size), radius=radius, fill=255)
         avatar.putalpha(mask)
         canvas.alpha_composite(avatar, (left, top))
-        draw.rounded_rectangle(box, radius=radius, outline=colors["avatar_border"], width=1)
+        draw.rounded_rectangle(
+            box,
+            radius=radius,
+            outline=colors["avatar_border"],
+            width=self._scaled(1),
+        )
 
     def _draw_visibility_badge(self, draw, text: str, right: int, top: int, font) -> None:
         color_map = {
@@ -381,11 +427,22 @@ class MemoCardRenderer:
         }
         bg, fg, border = color_map.get(text, ((243, 244, 246, 255), (75, 85, 99, 255), (229, 231, 235, 255)))
         bbox = draw.textbbox((0, 0), text, font=font)
-        width = bbox[2] - bbox[0] + 16
-        height = bbox[3] - bbox[1] + 8
+        width = bbox[2] - bbox[0] + self._scaled(16)
+        height = bbox[3] - bbox[1] + self._scaled(8)
         left = right - width
-        draw.rounded_rectangle((left, top, right, top + height), radius=height // 2, fill=bg, outline=border, width=1)
-        draw.text((left + 8, top + 4 - bbox[1]), text, font=font, fill=fg)
+        draw.rounded_rectangle(
+            (left, top, right, top + height),
+            radius=height // 2,
+            fill=bg,
+            outline=border,
+            width=self._scaled(1),
+        )
+        draw.text(
+            (left + self._scaled(8), top + self._scaled(4) - bbox[1]),
+            text,
+            font=font,
+            fill=fg,
+        )
 
     def _draw_previews(
         self,
@@ -405,42 +462,43 @@ class MemoCardRenderer:
             self._draw_single_preview(canvas, previews[0], left, top, width)
             return
 
-        tile_width = (width - self._IMAGE_GAP) // 2
+        tile_width = (width - self._scaled(self._IMAGE_GAP)) // 2
         for index, image in enumerate(previews):
             row = index // 2
             col = index % 2
-            x = left + col * (tile_width + self._IMAGE_GAP)
-            y = top + row * (self._GRID_IMAGE_HEIGHT + self._IMAGE_GAP)
-            self._draw_grid_preview(canvas, draw, image, x, y, tile_width, self._GRID_IMAGE_HEIGHT)
+            x = left + col * (tile_width + self._scaled(self._IMAGE_GAP))
+            y = top + row * (self._scaled(self._GRID_IMAGE_HEIGHT) + self._scaled(self._IMAGE_GAP))
+            self._draw_grid_preview(canvas, draw, image, x, y, tile_width, self._scaled(self._GRID_IMAGE_HEIGHT))
 
             extra_count = total_count - len(previews)
             if extra_count > 0 and index == len(previews) - 1:
-                self._draw_more_overlay(canvas, draw, x, y, tile_width, self._GRID_IMAGE_HEIGHT, extra_count)
+                self._draw_more_overlay(canvas, draw, x, y, tile_width, self._scaled(self._GRID_IMAGE_HEIGHT), extra_count)
 
     def _draw_single_preview(self, canvas, image, left: int, top: int, max_width: int) -> None:
         image = image.copy()
-        image.thumbnail((max_width, self._SINGLE_IMAGE_MAX_HEIGHT), self._resampling())
+        image.thumbnail((max_width, self._scaled(self._SINGLE_IMAGE_MAX_HEIGHT)), self._resampling())
         width, height = image.size
         mask = Image.new("L", (width, height), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width, height), radius=12, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width, height), radius=self._scaled(12), fill=255)
         image.putalpha(mask)
-        canvas.alpha_composite(image, (left, top))
+        draw_left = left + max((max_width - width) // 2, 0)
+        canvas.alpha_composite(image, (draw_left, top))
 
     def _draw_grid_preview(self, canvas, draw, image, left: int, top: int, width: int, height: int) -> None:
         preview = ImageOps.fit(image, (width, height), method=self._resampling())
         mask = Image.new("L", (width, height), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width, height), radius=12, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width, height), radius=self._scaled(12), fill=255)
         preview.putalpha(mask)
         canvas.alpha_composite(preview, (left, top))
 
     def _draw_more_overlay(self, canvas, draw, left: int, top: int, width: int, height: int, count: int) -> None:
         overlay = Image.new("RGBA", (width, height), (17, 24, 39, 86))
         mask = Image.new("L", (width, height), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width, height), radius=12, fill=255)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width, height), radius=self._scaled(12), fill=255)
         overlay.putalpha(mask)
         canvas.alpha_composite(overlay, (left, top))
 
-        font = self._font(26, bold=True)
+        font = self._font(self._scaled(26), bold=True)
         text = f"+{count} 张"
         bbox = draw.textbbox((0, 0), text, font=font)
         text_w = bbox[2] - bbox[0]
@@ -458,9 +516,12 @@ class MemoCardRenderer:
         if len(previews) == 1:
             image = previews[0]
             ratio = image.height / max(image.width, 1)
-            return min(self._SINGLE_IMAGE_MAX_HEIGHT, max(180, int(width * ratio)))
+            return min(
+                self._scaled(self._SINGLE_IMAGE_MAX_HEIGHT),
+                max(self._scaled(180), int(width * ratio)),
+            )
         rows = math.ceil(len(previews) / 2)
-        return rows * self._GRID_IMAGE_HEIGHT + max(rows - 1, 0) * self._IMAGE_GAP
+        return rows * self._scaled(self._GRID_IMAGE_HEIGHT) + max(rows - 1, 0) * self._scaled(self._IMAGE_GAP)
 
     def _wrap_text(self, draw, text: str, font, max_width: int, *, max_lines: int) -> list[str]:
         text = str(text or "").strip()
@@ -842,6 +903,9 @@ class MemoCardRenderer:
     @staticmethod
     def _resampling():
         return getattr(Image, "Resampling", Image).LANCZOS
+
+    def _scaled(self, value: int) -> int:
+        return max(int(round(value * self._RENDER_SCALE)), 1)
 
     @staticmethod
     def _same_site(base_url: str, url: str) -> bool:
