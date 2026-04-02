@@ -65,11 +65,17 @@ class MemoCardRenderer:
         "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
         "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
     )
+    _EMOJI_FONT_CANDIDATES = (
+        "C:/Windows/Fonts/seguiemj.ttf",
+        "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+        "/usr/share/fonts/emoji/NotoColorEmoji.ttf",
+    )
 
     def __init__(self, config: MemosWorkspaceForwarderConfig, cache_root: str | Path) -> None:
         self._config = config
         self._cache_dir = Path(cache_root) / "rendered_cards"
         self._font_cache: dict[tuple[bool, int], Any] = {}
+        self._emoji_font_cache: dict[int, Any] = {}
 
     async def render(self, item: dict[str, Any], source: SourceConfig | None) -> Path:
         if Image is None:
@@ -452,7 +458,7 @@ class MemoCardRenderer:
         current = ""
         for char in text:
             candidate = f"{current}{char}"
-            if draw.textlength(candidate, font=font) <= max_width or not current:
+            if self._measure_text_width(draw, candidate, font) <= max_width or not current:
                 current = candidate
                 continue
             lines.append(current.rstrip())
@@ -504,7 +510,7 @@ class MemoCardRenderer:
         if not lines:
             return ["..."]
         last = lines[-1].rstrip()
-        while last and draw.textlength(f"{last}...", font=font) > max_width:
+        while last and self._measure_text_width(draw, f"{last}...", font) > max_width:
             last = last[:-1]
         lines[-1] = f"{last}..." if last else "..."
         return lines
@@ -514,14 +520,13 @@ class MemoCardRenderer:
             if not lines[index]:
                 continue
             line = lines[index].rstrip()
-            while line and draw.textlength(f"{line}...", font=font) > max_width:
+            while line and self._measure_text_width(draw, f"{line}...", font) > max_width:
                 line = line[:-1]
             lines[index] = f"{line}..." if line else "..."
             return lines[: index + 1]
         return ["..."]
 
-    @staticmethod
-    def _line_height(draw, font) -> int:
+    def _line_height(self, draw, font) -> int:
         bbox = draw.textbbox((0, 0), "中Ay", font=font)
         return max(bbox[3] - bbox[1], 1)
 
@@ -543,8 +548,8 @@ class MemoCardRenderer:
             previous_was_text = True
         return height
 
-    @staticmethod
     def _draw_wrapped_lines(
+        self,
         draw,
         lines: list[str],
         font,
@@ -557,7 +562,7 @@ class MemoCardRenderer:
     ) -> None:
         current_y = top
         previous_was_text = False
-        line_height = MemoCardRenderer._line_height(draw, font)
+        line_height = self._line_height(draw, font)
         for line in lines:
             if not line:
                 if previous_was_text:
@@ -566,7 +571,7 @@ class MemoCardRenderer:
                 continue
             if previous_was_text:
                 current_y += line_gap
-            draw.text((left, current_y), line, font=font, fill=fill)
+            self._draw_text_with_fallback(draw, (left, current_y), line, font, fill)
             current_y += line_height
             previous_was_text = True
 
@@ -619,6 +624,140 @@ class MemoCardRenderer:
 
         self._font_cache[cache_key] = font
         return font
+
+    def _emoji_font(self, size: int):
+        cached = self._emoji_font_cache.get(size)
+        if cached is not None:
+            return cached
+
+        font = None
+        for candidate in self._EMOJI_FONT_CANDIDATES:
+            if Path(candidate).exists():
+                try:
+                    font = ImageFont.truetype(candidate, size=size)
+                    break
+                except Exception:
+                    continue
+
+        self._emoji_font_cache[size] = font
+        return font
+
+    @staticmethod
+    def _is_emoji_char(char: str) -> bool:
+        if not char:
+            return False
+        codepoint = ord(char)
+        return (
+            0x1F1E6 <= codepoint <= 0x1F1FF
+            or 0x1F300 <= codepoint <= 0x1FAFF
+            or 0x2600 <= codepoint <= 0x27BF
+            or codepoint in {0x00A9, 0x00AE, 0x203C, 0x2049, 0x2122, 0x2139, 0x3030, 0x303D, 0x3297, 0x3299}
+        )
+
+    @staticmethod
+    def _is_emoji_component(char: str) -> bool:
+        if not char:
+            return False
+        codepoint = ord(char)
+        return codepoint in {0x200D, 0xFE0E, 0xFE0F, 0x20E3} or 0x1F3FB <= codepoint <= 0x1F3FF
+
+    def _iter_font_runs(self, text: str, font):
+        if not text:
+            return
+
+        font_size = int(getattr(font, "size", 16) or 16)
+        emoji_font = self._emoji_font(font_size)
+        if emoji_font is None:
+            yield text, font, False
+            return
+
+        current_chars: list[str] = []
+        current_font = None
+        current_is_emoji = False
+
+        for char in text:
+            is_emoji = self._is_emoji_char(char) or (
+                current_is_emoji and self._is_emoji_component(char)
+            )
+            target_font = emoji_font if is_emoji else font
+            if current_font is target_font and current_is_emoji == is_emoji:
+                current_chars.append(char)
+                continue
+
+            if current_chars:
+                yield "".join(current_chars), current_font, current_is_emoji
+
+            current_chars = [char]
+            current_font = target_font
+            current_is_emoji = is_emoji
+
+        if current_chars:
+            yield "".join(current_chars), current_font, current_is_emoji
+
+    @staticmethod
+    def _run_text_length(draw, text: str, font, *, embedded_color: bool) -> float:
+        try:
+            return float(draw.textlength(text, font=font, embedded_color=embedded_color))
+        except TypeError:
+            return float(draw.textlength(text, font=font))
+
+    @staticmethod
+    def _run_text_bbox(draw, text: str, font, *, embedded_color: bool) -> tuple[int, int, int, int]:
+        try:
+            return draw.textbbox((0, 0), text, font=font, embedded_color=embedded_color)
+        except TypeError:
+            return draw.textbbox((0, 0), text, font=font)
+
+    @staticmethod
+    def _draw_text_run(draw, xy: tuple[float, float], text: str, font, fill, *, embedded_color: bool) -> None:
+        try:
+            draw.text(xy, text, font=font, fill=fill, embedded_color=embedded_color)
+        except TypeError:
+            draw.text(xy, text, font=font, fill=fill)
+
+    def _measure_text_width(self, draw, text: str, font) -> float:
+        width = 0.0
+        for run_text, run_font, embedded_color in self._iter_font_runs(text, font):
+            width += self._run_text_length(draw, run_text, run_font, embedded_color=embedded_color)
+        return width
+
+    def _measure_text_bbox(self, draw, text: str, font) -> tuple[int, int, int, int]:
+        if not text:
+            return (0, 0, 0, 0)
+
+        cursor_x = 0.0
+        top = 0
+        bottom = 0
+        right = 0.0
+        has_box = False
+
+        for run_text, run_font, embedded_color in self._iter_font_runs(text, font):
+            bbox = self._run_text_bbox(draw, run_text, run_font, embedded_color=embedded_color)
+            run_width = self._run_text_length(draw, run_text, run_font, embedded_color=embedded_color)
+            if not has_box:
+                top = bbox[1]
+                bottom = bbox[3]
+                has_box = True
+            else:
+                top = min(top, bbox[1])
+                bottom = max(bottom, bbox[3])
+            right = max(right, cursor_x + run_width)
+            cursor_x += run_width
+
+        return (0, top, int(math.ceil(right)), bottom)
+
+    def _draw_text_with_fallback(self, draw, xy: tuple[float, float], text: str, font, fill) -> None:
+        cursor_x = float(xy[0])
+        for run_text, run_font, embedded_color in self._iter_font_runs(text, font):
+            self._draw_text_run(
+                draw,
+                (cursor_x, float(xy[1])),
+                run_text,
+                run_font,
+                fill,
+                embedded_color=embedded_color,
+            )
+            cursor_x += self._run_text_length(draw, run_text, run_font, embedded_color=embedded_color)
 
     @staticmethod
     def _resampling():
