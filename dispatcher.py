@@ -31,11 +31,40 @@ class MemoDispatcher:
             target.id: target for target in config.targets if target.enabled and target.unified_msg_origin
         }
         self._job_target_origins = {
-            job.id: [self._target_map[target_id].unified_msg_origin for target_id in job.target_ids if target_id in self._target_map]
+            job.id: [
+                self._normalize_origin(self._target_map[target_id].unified_msg_origin)
+                for target_id in job.target_ids
+                if target_id in self._target_map
+            ]
             for job in config.jobs
             if job.enabled
         }
         self._disabled_origins: set[str] = set()
+
+    @staticmethod
+    def _normalize_origin(origin: str) -> str:
+        text = str(origin or "").strip()
+        if not text:
+            return ""
+
+        parts = text.split(":", 2)
+        if len(parts) != 3:
+            return text
+
+        platform_id, message_type, session_id = parts
+        type_aliases = {
+            "group": "GroupMessage",
+            "groupmessage": "GroupMessage",
+            "private": "FriendMessage",
+            "friend": "FriendMessage",
+            "friendmessage": "FriendMessage",
+            "user": "FriendMessage",
+            "dm": "FriendMessage",
+            "other": "OtherMessage",
+            "othermessage": "OtherMessage",
+        }
+        normalized_type = type_aliases.get(message_type.strip().lower(), message_type.strip())
+        return f"{platform_id}:{normalized_type}:{session_id}"
 
     @staticmethod
     def _resolve_messagechain_cls():

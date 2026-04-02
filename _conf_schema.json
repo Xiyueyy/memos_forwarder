@@ -94,8 +94,8 @@
           "unified_msg_origin": {
             "type": "string",
             "default": "",
-            "description": "AstrBot 统一会话标识",
-            "hint": "启用该目标时必须填写，可先保存为草稿"
+            "description": "AstrBot 统一会话标识，例如 aiocqhttp:GroupMessage:123456789",
+            "hint": "旧写法 aiocqhttp:group:123456789 也会自动兼容"
           },
           "enabled": {
             "type": "bool",

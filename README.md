@@ -105,6 +105,9 @@ visibility in ["PROTECTED", "PUBLIC"]
 - `unified_msg_origin`
 - `enabled`
 
+`unified_msg_origin` 请使用 AstrBot 当前的会话字符串格式，例如 `aiocqhttp:GroupMessage:123456789`。
+旧写法 `aiocqhttp:group:123456789` 现在插件也会自动兼容转换。
+
 ### 3. `jobs[]`
 
 - `id`
@@ -149,7 +152,7 @@ visibility in ["PROTECTED", "PUBLIC"]
     {
       "id": "qq_group_a",
       "platform": "qq",
-      "unified_msg_origin": "aiocqhttp:group:123456789",
+      "unified_msg_origin": "aiocqhttp:GroupMessage:123456789",
       "enabled": true
     }
   ],
