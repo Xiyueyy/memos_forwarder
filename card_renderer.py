@@ -5,6 +5,7 @@ import hashlib
 import html
 import math
 import re
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,13 @@ try:  # pragma: no cover
     from PIL import Image, ImageDraw, ImageFont, ImageOps
 except ImportError:  # pragma: no cover
     Image = ImageDraw = ImageFont = ImageOps = None
+
+
+@dataclass(slots=True)
+class _EmojiFontHandle:
+    font: Any
+    target_size: int
+    native_size: int
 
 
 class MemoCardRenderer:
@@ -70,6 +78,7 @@ class MemoCardRenderer:
         "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
         "/usr/share/fonts/emoji/NotoColorEmoji.ttf",
     )
+    _EMOJI_FONT_FIXED_SIZES = (109, 128, 136, 160, 96, 72)
 
     def __init__(self, config: MemosWorkspaceForwarderConfig, cache_root: str | Path) -> None:
         self._config = config
@@ -196,6 +205,7 @@ class MemoCardRenderer:
 
         text_left = content_left + self._AVATAR_SIZE + self._HEADER_GAP
         self._draw_wrapped_lines(
+            canvas,
             draw,
             name_lines,
             name_font,
@@ -207,6 +217,7 @@ class MemoCardRenderer:
         )
         time_y = current_y + self._measure_lines_height(name_lines, name_line_height, line_gap=4, paragraph_gap=0) + 2
         self._draw_wrapped_lines(
+            canvas,
             draw,
             time_lines,
             time_font,
@@ -230,6 +241,7 @@ class MemoCardRenderer:
 
         if title_lines:
             self._draw_wrapped_lines(
+                canvas,
                 draw,
                 title_lines,
                 heading_font,
@@ -242,6 +254,7 @@ class MemoCardRenderer:
             current_y += title_height + self._SECTION_GAP
 
         self._draw_wrapped_lines(
+            canvas,
             draw,
             body_lines,
             body_font,
@@ -527,7 +540,7 @@ class MemoCardRenderer:
         return ["..."]
 
     def _line_height(self, draw, font) -> int:
-        bbox = draw.textbbox((0, 0), "中Ay", font=font)
+        bbox = self._measure_text_bbox(draw, "中Ay🙂", font)
         return max(bbox[3] - bbox[1], 1)
 
     @staticmethod
@@ -550,6 +563,7 @@ class MemoCardRenderer:
 
     def _draw_wrapped_lines(
         self,
+        canvas,
         draw,
         lines: list[str],
         font,
@@ -571,7 +585,7 @@ class MemoCardRenderer:
                 continue
             if previous_was_text:
                 current_y += line_gap
-            self._draw_text_with_fallback(draw, (left, current_y), line, font, fill)
+            self._draw_text_with_fallback(canvas, draw, (left, current_y), line, font, fill)
             current_y += line_height
             previous_was_text = True
 
@@ -634,10 +648,27 @@ class MemoCardRenderer:
         for candidate in self._EMOJI_FONT_CANDIDATES:
             if Path(candidate).exists():
                 try:
-                    font = ImageFont.truetype(candidate, size=size)
+                    native_font = ImageFont.truetype(candidate, size=size)
+                    font = _EmojiFontHandle(
+                        font=native_font,
+                        target_size=size,
+                        native_size=size,
+                    )
                     break
                 except Exception:
-                    continue
+                    for fixed_size in self._EMOJI_FONT_FIXED_SIZES:
+                        try:
+                            native_font = ImageFont.truetype(candidate, size=fixed_size)
+                            font = _EmojiFontHandle(
+                                font=native_font,
+                                target_size=size,
+                                native_size=fixed_size,
+                            )
+                            break
+                        except Exception:
+                            continue
+                    if font is not None:
+                        break
 
         self._emoji_font_cache[size] = font
         return font
@@ -696,6 +727,19 @@ class MemoCardRenderer:
 
     @staticmethod
     def _run_text_length(draw, text: str, font, *, embedded_color: bool) -> float:
+        if isinstance(font, _EmojiFontHandle):
+            native_font = font.font
+            scale = font.target_size / max(font.native_size, 1)
+            try:
+                return float(
+                    draw.textlength(
+                        text,
+                        font=native_font,
+                        embedded_color=embedded_color,
+                    )
+                ) * scale
+            except TypeError:
+                return float(draw.textlength(text, font=native_font)) * scale
         try:
             return float(draw.textlength(text, font=font, embedded_color=embedded_color))
         except TypeError:
@@ -703,13 +747,48 @@ class MemoCardRenderer:
 
     @staticmethod
     def _run_text_bbox(draw, text: str, font, *, embedded_color: bool) -> tuple[int, int, int, int]:
+        if isinstance(font, _EmojiFontHandle):
+            native_font = font.font
+            scale = font.target_size / max(font.native_size, 1)
+            try:
+                bbox = draw.textbbox((0, 0), text, font=native_font, embedded_color=embedded_color)
+            except TypeError:
+                bbox = draw.textbbox((0, 0), text, font=native_font)
+            return tuple(int(round(value * scale)) for value in bbox)
         try:
             return draw.textbbox((0, 0), text, font=font, embedded_color=embedded_color)
         except TypeError:
             return draw.textbbox((0, 0), text, font=font)
 
-    @staticmethod
-    def _draw_text_run(draw, xy: tuple[float, float], text: str, font, fill, *, embedded_color: bool) -> None:
+    def _draw_text_run(self, canvas, draw, xy: tuple[float, float], text: str, font, fill, *, embedded_color: bool) -> None:
+        if isinstance(font, _EmojiFontHandle) and font.native_size != font.target_size:
+            native_font = font.font
+            scale = font.target_size / max(font.native_size, 1)
+            bbox = self._run_text_bbox(draw, text, native_font, embedded_color=embedded_color)
+            width = max(bbox[2] - bbox[0], 1)
+            height = max(bbox[3] - bbox[1], 1)
+
+            temp = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            temp_draw = ImageDraw.Draw(temp)
+            try:
+                temp_draw.text(
+                    (-bbox[0], -bbox[1]),
+                    text,
+                    font=native_font,
+                    fill=fill,
+                    embedded_color=embedded_color,
+                )
+            except TypeError:
+                temp_draw.text((-bbox[0], -bbox[1]), text, font=native_font, fill=fill)
+
+            scaled_width = max(int(round(width * scale)), 1)
+            scaled_height = max(int(round(height * scale)), 1)
+            scaled = temp.resize((scaled_width, scaled_height), self._resampling())
+            paste_x = int(round(xy[0] + bbox[0] * scale))
+            paste_y = int(round(xy[1] + bbox[1] * scale))
+            canvas.alpha_composite(scaled, (paste_x, paste_y))
+            return
+
         try:
             draw.text(xy, text, font=font, fill=fill, embedded_color=embedded_color)
         except TypeError:
@@ -746,10 +825,11 @@ class MemoCardRenderer:
 
         return (0, top, int(math.ceil(right)), bottom)
 
-    def _draw_text_with_fallback(self, draw, xy: tuple[float, float], text: str, font, fill) -> None:
+    def _draw_text_with_fallback(self, canvas, draw, xy: tuple[float, float], text: str, font, fill) -> None:
         cursor_x = float(xy[0])
         for run_text, run_font, embedded_color in self._iter_font_runs(text, font):
             self._draw_text_run(
+                canvas,
                 draw,
                 (cursor_x, float(xy[1])),
                 run_text,
