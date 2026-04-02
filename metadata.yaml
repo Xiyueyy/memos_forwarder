@@ -1,0 +1,11 @@
+name: astrbot_plugin_memos_workspace_forwarder
+author: Codex
+description: Poll authenticated Memos API and forward memos to AstrBot targets with card images.
+version: 0.2.0
+repo: ""
+tags:
+  - astrbot
+  - memos
+  - workspace
+  - forwarder
+  - card

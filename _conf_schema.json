@@ -1,0 +1,202 @@
+{
+  "sources": {
+    "type": "template_list",
+    "description": "Memos 源配置",
+    "templates": {
+      "source": {
+        "name": "Memos 源",
+        "hint": "通过 Memos API 读取当前 token 可见的 memo",
+        "items": {
+          "id": {
+            "type": "string",
+            "default": "",
+            "description": "源唯一 ID"
+          },
+          "base_url": {
+            "type": "string",
+            "default": "",
+            "description": "Memos 站点地址，如 https://memos.example.com"
+          },
+          "access_token": {
+            "type": "string",
+            "default": "",
+            "description": "Bearer Token，推荐填写 Memos PAT"
+          },
+          "creator_name": {
+            "type": "string",
+            "default": "",
+            "description": "可选：只抓指定作者；留空时抓当前 token 可见且匹配可见性条件的全部帖子"
+          },
+          "visibility_mode": {
+            "type": "string",
+            "default": "workspace_or_public",
+            "options": [
+              "workspace",
+              "protected",
+              "public",
+              "private",
+              "workspace_or_public",
+              "private_or_workspace",
+              "private_or_public",
+              "workspace_or_protected",
+              "all_mine"
+            ],
+            "description": "可见性筛选：workspace/protected=PROTECTED，private=PRIVATE，public=PUBLIC"
+          },
+          "raw_filter": {
+            "type": "string",
+            "default": "",
+            "description": "附加 CEL 过滤条件，可留空"
+          },
+          "page_size": {
+            "type": "int",
+            "default": 20,
+            "description": "每页拉取数量"
+          },
+          "max_pages": {
+            "type": "int",
+            "default": 3,
+            "description": "单次最多拉取页数"
+          },
+          "timeout": {
+            "type": "int",
+            "default": 15,
+            "description": "请求超时秒数"
+          },
+          "enabled": {
+            "type": "bool",
+            "default": false,
+            "description": "是否启用该源",
+            "hint": "新建条目默认关闭，补全地址和 token 后再启用"
+          }
+        }
+      }
+    }
+  },
+  "targets": {
+    "type": "template_list",
+    "description": "推送目标配置",
+    "templates": {
+      "target": {
+        "name": "推送目标",
+        "hint": "配置一个消息推送目标",
+        "items": {
+          "id": {
+            "type": "string",
+            "default": "",
+            "description": "目标唯一 ID"
+          },
+          "platform": {
+            "type": "string",
+            "default": "",
+            "description": "平台标识，如 qq/telegram"
+          },
+          "unified_msg_origin": {
+            "type": "string",
+            "default": "",
+            "description": "AstrBot 统一会话标识",
+            "hint": "启用该目标时必须填写，可先保存为草稿"
+          },
+          "enabled": {
+            "type": "bool",
+            "default": false,
+            "description": "是否启用该目标"
+          }
+        }
+      }
+    }
+  },
+  "jobs": {
+    "type": "template_list",
+    "description": "轮询任务配置",
+    "templates": {
+      "job": {
+        "name": "轮询任务",
+        "hint": "一个任务可绑定多个源和多个目标",
+        "items": {
+          "id": {
+            "type": "string",
+            "default": "",
+            "description": "任务唯一 ID"
+          },
+          "source_ids": {
+            "type": "list",
+            "default": [],
+            "description": "关联的 source ID 列表"
+          },
+          "target_ids": {
+            "type": "list",
+            "default": [],
+            "description": "关联的 target ID 列表"
+          },
+          "interval_seconds": {
+            "type": "int",
+            "default": 300,
+            "description": "轮询间隔秒数"
+          },
+          "batch_size": {
+            "type": "int",
+            "default": 10,
+            "description": "每次最多推送多少条"
+          },
+          "enabled": {
+            "type": "bool",
+            "default": false,
+            "description": "是否启用该任务",
+            "hint": "新建条目默认关闭，补全 source 和 target 后再启用"
+          }
+        }
+      }
+    }
+  },
+  "dedup_ttl_seconds": {
+    "type": "int",
+    "default": 604800,
+    "description": "去重记录保留时间（秒）"
+  },
+  "startup_delay_seconds": {
+    "type": "int",
+    "default": 20,
+    "description": "插件启动后的首轮延迟（秒）"
+  },
+  "summary_max_chars": {
+    "type": "int",
+    "default": 280,
+    "description": "摘要最大字符数"
+  },
+  "forward_images": {
+    "type": "bool",
+    "default": true,
+    "description": "是否自动提取并转发附件图和正文图片 URL"
+  },
+  "max_images_per_memo": {
+    "type": "int",
+    "default": 4,
+    "description": "每条 memo 最多转发多少张图片，填 0 表示不发图"
+  },
+  "render_memo_card": {
+    "type": "bool",
+    "default": true,
+    "description": "是否把新帖子渲染成一张手记卡片图"
+  },
+  "card_preview_image_count": {
+    "type": "int",
+    "default": 4,
+    "description": "卡片图里最多展示多少张图片预览"
+  },
+  "standalone_images_when_card_enabled": {
+    "type": "bool",
+    "default": false,
+    "description": "启用卡片图后，是否继续把原图单独再发一遍"
+  },
+  "announcement_template": {
+    "type": "string",
+    "default": "{display_name} 发了新手记",
+    "description": "新帖子提示语模板，可用变量：display_name、username、title、visibility、published_at、link、source"
+  },
+  "time_format": {
+    "type": "string",
+    "default": "%Y-%m-%d %H:%M:%S",
+    "description": "时间显示格式"
+  }
+}
