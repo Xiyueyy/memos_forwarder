@@ -47,6 +47,7 @@ class MemoCardRenderer:
     _GRID_IMAGE_HEIGHT = 190
     _BODY_MAX_CHARS = 2600
     _MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024
+    _MAX_AVATAR_DOWNLOAD_BYTES = 32 * 1024 * 1024
 
     _MARKDOWN_IMAGE_RE = re.compile(
         r"!\[[^\]]*\]\((?:<)?(?P<url>[^)\s>]+)(?:\s+\"[^\"]*\")?(?:>)?\)",
@@ -106,6 +107,7 @@ class MemoCardRenderer:
             str(item.get("creator_avatar_url", "")).strip(),
             source=source,
             attach_bearer=True,
+            max_download_bytes=self._MAX_AVATAR_DOWNLOAD_BYTES,
         )
         previews = self._load_preview_images(item, source)
 
@@ -340,12 +342,24 @@ class MemoCardRenderer:
             auth = str(entry.get("auth", "none")).strip().lower()
             if not url:
                 continue
-            image = self._load_image(url, source=source, attach_bearer=(auth == "bearer"))
+            image = self._load_image(
+                url,
+                source=source,
+                attach_bearer=(auth == "bearer"),
+                max_download_bytes=self._MAX_DOWNLOAD_BYTES,
+            )
             if image is not None:
                 previews.append(image)
         return previews
 
-    def _load_image(self, url: str, *, source: SourceConfig | None, attach_bearer: bool):
+    def _load_image(
+        self,
+        url: str,
+        *,
+        source: SourceConfig | None,
+        attach_bearer: bool,
+        max_download_bytes: int,
+    ):
         if not url or Image is None:
             return None
 
@@ -366,16 +380,18 @@ class MemoCardRenderer:
                 Request(url=url, headers=headers),
                 timeout=int(source.timeout) if source is not None else 15,
             ) as response:  # noqa: S310
-                data = response.read(self._MAX_DOWNLOAD_BYTES + 1)
+                data = response.read(max_download_bytes + 1)
         except Exception as exc:
             logger.debug("load card image failed url=%s err=%s", url, exc)
             return None
 
-        if not data or len(data) > self._MAX_DOWNLOAD_BYTES:
+        if not data or len(data) > max_download_bytes:
             return None
 
         try:
-            return Image.open(BytesIO(data)).convert("RGBA")
+            image = Image.open(BytesIO(data))
+            image.load()
+            return image.convert("RGBA")
         except Exception as exc:
             logger.debug("decode card image failed url=%s err=%s", url, exc)
             return None
