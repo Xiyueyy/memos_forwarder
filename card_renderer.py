@@ -606,7 +606,7 @@ class MemoCardRenderer:
             if consumed < len(text.replace("\n", "")):
                 result = self._truncate_paragraph_result(draw, result, font, max_width)
 
-        return result or ["这条手记没有文字内容。"]
+        return result
 
     def _truncate_lines(self, draw, lines: list[str], font, max_width: int, max_lines: int) -> list[str]:
         lines = lines[:max_lines]
@@ -681,7 +681,7 @@ class MemoCardRenderer:
 
     def _clean_body_text(self, text: str) -> str:
         if not text:
-            return "这条手记没有文字内容。"
+            return ""
 
         text = html.unescape(text)
         text = self._CODE_FENCE_RE.sub(lambda match: match.group("code").strip(), text)
@@ -696,7 +696,7 @@ class MemoCardRenderer:
         text = re.sub(r"\n{3,}", "\n\n", text).strip()
         if len(text) > self._BODY_MAX_CHARS:
             text = f"{text[: self._BODY_MAX_CHARS].rstrip()}\n\n..."
-        return text or "这条手记没有文字内容。"
+        return text
 
     @staticmethod
     def _select_distinct_title(item: dict[str, Any]) -> str:
